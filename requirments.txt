@@ -1,0 +1,4 @@
+fastapi
+ceylon
+uvicorn
+python-socketio
