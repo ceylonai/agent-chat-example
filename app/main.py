@@ -7,6 +7,35 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware  # Import CORS Middleware
 import socketio
 
+## Ceylon imports
+from ceylon import Admin, Worker, AgentDetail, on
+
+
+@dataclasses.dataclass
+class HumanInput:
+    content: str
+
+
+class HumanAgent(Worker):
+
+    def __init__(self, name, role):
+        super().__init__(name, role)
+
+    @on(HumanInput)
+    async def on_human_input(self, data: HumanInput, agent: AgentDetail, time):
+        print(f"Message {agent.name} - {data}")
+        await self.broadcast_message({
+            "username": self.details().name,
+            "message": data.content
+        })
+
+
+admin = Admin("admin", 7445)
+worker_1 = Worker("worker_1", "worker")
+worker_2 = Worker("worker_2", "worker")
+worker_3 = Worker("worker_3", "worker")
+human_interface = HumanAgent("human_interface", "human")
+
 # Initialize FastAPI
 app = FastAPI()
 
@@ -59,6 +88,7 @@ async def message(sid, data):
     print(f"Message from {username}: {data}")
     # Broadcast the message to all connected clients
     await sio.emit("response", {"username": username, "message": data})
+    await admin.broadcast_message(HumanInput(content=data))
 
 
 # FastAPI route to serve the main page
@@ -82,7 +112,7 @@ async def leave_room(sid, room):
 
 @app.on_event("startup")
 async def startup_event():
-    asyncio.create_task(admin.start_agent(b"", [worker_1, worker_2, worker_3]))
+    asyncio.create_task(admin.start_agent(b"", [worker_1, worker_2, worker_3, human_interface]))
 
 
 @admin.on_connect("*")
@@ -105,12 +135,12 @@ async def on_message_1(data, sender: AgentDetail, time):
                     "message": f'Message From {worker_1.details().name} - {data["message"]}'})
 
 
-@admin.on_run()
-async def on_run(input):
-    print("Admin is running")
-    while True:
-        await admin.broadcast_message({"message": "Admin is running"})
-        await asyncio.sleep(1)
+# @admin.on_run()
+# async def on_run(input):
+#     print("Admin is running")
+#     while True:
+#         await admin.broadcast_message({"message": "Admin is running"})
+#         await asyncio.sleep(100)
 
 
 if __name__ == '__main__':
