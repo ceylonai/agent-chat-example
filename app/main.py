@@ -1,3 +1,6 @@
+import asyncio
+import dataclasses
+
 from fastapi import FastAPI, Request
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -75,6 +78,39 @@ async def join_room(sid, room):
 async def leave_room(sid, room):
     await sio.leave_room(sid, room)
     await sio.emit("room_left", {"room": room, "username": usernames.get(sid, "Unknown")}, room=room)
+
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(admin.start_agent(b"", [worker_1, worker_2, worker_3]))
+
+
+@admin.on_connect("*")
+async def on_connect(topic, agent: AgentDetail):
+    await asyncio.sleep(2)
+    print(f"Agent connected: {agent.name}")
+    print(f"Agent connected: {agent.id}")
+    usernames[agent.id] = agent.name
+    await sio.emit("user_joined", {"username": agent.name})
+    # Broadcast the message to all connected clients
+    await sio.emit("response", {"username": agent.name, "message": f"Agent {agent.name} connected"})
+
+
+@worker_1.on(dict)
+async def on_message_1(data, sender: AgentDetail, time):
+    print(f"Message from {sender.name}  - {data['message']}")
+    # Broadcast the message to all connected clients
+    await sio.emit("response",
+                   {"username": worker_1.details().name,
+                    "message": f'Message From {worker_1.details().name} - {data["message"]}'})
+
+
+@admin.on_run()
+async def on_run(input):
+    print("Admin is running")
+    while True:
+        await admin.broadcast_message({"message": "Admin is running"})
+        await asyncio.sleep(1)
 
 
 if __name__ == '__main__':
